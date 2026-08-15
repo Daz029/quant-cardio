@@ -1,0 +1,255 @@
+:root {
+  --ground: #ded0b6;
+  --surface: #f0e7d6;
+  --surface-press: #ddcfb3;
+  --edge: #b3a082;
+
+  --ink: #3a3327;
+  --ink-soft: #7c7057;
+
+  --correct: #7cab89;
+  --wrong: #c67d74;
+
+  --back-face: #e7d5b1;
+  --back-ink: #3a3327;
+  --submit-face: #e3d7c0;
+  --submit-ink: #6b6154;
+
+  --radius: 14px;
+  --key-weight: 700;
+  --key-size: clamp(58px, 11dvh, 92px);
+}
+
+:root[data-theme='dark'] {
+  --ground: #000000;
+  --surface: #333333;
+  --surface-press: #737373;
+  --edge: transparent;
+
+  --ink: #ffffff;
+  --ink-soft: #8e8e93;
+
+  --correct: #30d158;
+  --wrong: #ff453a;
+
+  --back-face: #a5a5a5;
+  --back-ink: #000000;
+  --submit-face: #ff9f0a;
+  --submit-ink: #ffffff;
+
+  --radius: 50%;
+  --key-weight: 400;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+
+  font-family: ui-rounded, 'SF Pro Rounded', 'Segoe UI Variable Display',
+    system-ui, sans-serif;
+
+  color: var(--ink);
+  background: var(--ground);
+
+  transition: background-color 200ms linear, color 200ms linear;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+}
+
+.app {
+  width: min(100%, 460px);
+  min-height: 100dvh;
+  margin: auto;
+
+  padding: 16px 20px calc(20px + env(safe-area-inset-bottom));
+
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.theme-toggle {
+  align-self: flex-end;
+
+  padding: 8px 16px;
+
+  background: transparent;
+  color: var(--ink-soft);
+  border: 2px solid var(--edge, currentColor);
+  border-radius: 999px;
+
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+:root[data-theme='dark'] .theme-toggle {
+  border-color: var(--surface);
+}
+
+/* Pushes the question / answer / message group to the optical centre and
+   leaves the keypad pinned to the bottom, inside thumb reach. */
+.question {
+  margin-top: auto;
+  text-align: center;
+
+  font-size: clamp(52px, 16vw, 84px);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.message {
+  margin-bottom: auto;
+  min-height: 24px;
+  text-align: center;
+
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+
+.answer-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+
+  height: clamp(72px, 15vw, 92px);
+  padding: 0 16px;
+
+  background: var(--surface);
+  border: 2px solid var(--edge);
+  border-radius: 14px;
+
+  font-size: clamp(38px, 10vw, 52px);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+
+  overflow: hidden;
+}
+
+:root[data-theme='dark'] .answer-bar {
+  background: transparent;
+  border-color: transparent;
+
+  height: clamp(84px, 17vw, 108px);
+  font-size: clamp(48px, 13vw, 68px);
+}
+
+.keypad {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.keypad button {
+  min-height: var(--key-size);
+
+  background: var(--surface);
+  border: 2px solid var(--edge);
+  border-radius: var(--radius);
+
+  font-size: clamp(28px, 7vw, 36px);
+  font-weight: var(--key-weight);
+  font-variant-numeric: tabular-nums;
+
+  cursor: pointer;
+  user-select: none;
+  -webkit-touch-callout: none;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+
+  transition: background-color 90ms linear;
+}
+
+.keypad button:active {
+  background: var(--surface-press);
+}
+
+.keypad button:focus-visible {
+  outline: 3px solid var(--ink);
+  outline-offset: 3px;
+}
+
+.key-back {
+  background: var(--back-face);
+  color: var(--back-ink);
+}
+
+.key-submit {
+  background: var(--submit-face);
+  color: var(--submit-ink);
+}
+
+/* iPhone-calculator geometry: fixed circles, grid centred rather than stretched. */
+:root[data-theme='dark'] .keypad {
+  grid-template-columns: repeat(3, var(--key-size));
+  justify-content: center;
+  gap: 12px;
+}
+
+:root[data-theme='dark'] .keypad button {
+  width: var(--key-size);
+  height: var(--key-size);
+  min-height: 0;
+}
+
+/* Verdict flash. A narrow horizontal radius makes the colour saturate well
+   before the left and right edges, so the wash is thick down both sides and
+   thin at top and bottom, leaving the question readable through the middle. */
+.screen {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+
+  --peak: 1;
+  animation: flash-out 700ms ease-out forwards;
+}
+
+@keyframes flash-out {
+  from {
+    opacity: var(--peak);
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+.screen.correct {
+  background: radial-gradient(
+    44% 92% at 50% 45%,
+    transparent 16%,
+    var(--correct) 100%
+  );
+}
+
+.screen.wrong {
+  background: radial-gradient(
+    44% 92% at 50% 45%,
+    transparent 16%,
+    var(--wrong) 100%
+  );
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body,
+  .keypad button {
+    transition: none;
+  }
+
+  .screen {
+    --peak: 0.5;
+  }
+}
