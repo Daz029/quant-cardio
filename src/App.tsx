@@ -306,7 +306,17 @@ type Prompt =
    0.2 accepts anything within 0.2 of it. It travels with the problem rather
    than being looked up at grading time, so the grader never has to know which
    operation produced what it is marking. */
-type Problem = { prompt: Prompt; answer: number; tolerance: number }
+/* alternate is a second way of writing the same answer, accepted alongside the
+   first: 8/18 is 44.4% or 0.444, and a runner who thinks in proportions
+   shouldn't have to convert. It carries its own tolerance because the slack has
+   to shrink with the units — a tenth of a percentage point is a thousandth of a
+   proportion. */
+type Problem = {
+  prompt: Prompt
+  answer: number
+  tolerance: number
+  alternate?: { answer: number; tolerance: number }
+}
 
 /* One answered problem, kept for the review list on the results screen. The
    prompt is carried whole rather than flattened to text, so the list can draw
@@ -431,8 +441,17 @@ function generateProblem(settings: Settings): Problem {
           denominator: String(denominator),
           suffix: 'as %',
         },
+        /* Each form divides once rather than deriving one from the other:
+           100 * (n / d) rounds twice and drifts in the last bits. */
         answer: (100 * numerator) / denominator,
         tolerance: settings.leniency.fraction,
+        /* The same answer as a proportion. A hundredth of the size, so a
+           hundredth of the slack — the leniency is read in percentage points,
+           and 0.1 of one of those is 0.001 of a proportion. */
+        alternate: {
+          answer: numerator / denominator,
+          tolerance: settings.leniency.fraction / 100,
+        },
       }
     }
     /* The reverse of the conversion above: the percentage is given and the part
@@ -484,22 +503,32 @@ function generateProblem(settings: Settings): Problem {
   }
 }
 
+/* Absolute, not scaled by the answer: a tolerance that grew with the number
+   made a large answer accept a wide band of entries that were nowhere near
+   it — e^3.91 is 49.9, and a 0.5 read as a proportion accepted everything
+   from 25 to 75. */
+function within(value: number, answer: number, tolerance: number): boolean {
+  if (tolerance <= 0) {
+    return value === answer
+  }
+  return Math.abs(value - answer) <= tolerance + 1e-9
+}
+
 /* The single grader for every problem. An empty or half-typed entry ('.', '')
    is wrong rather than 0, so a bare submit can't be credited against an answer
-   that happens to be zero. */
+   that happens to be zero. Where a problem accepts a second form of the same
+   answer, either band counts; the two never overlap, because one is a hundred
+   times the other. */
 function isCorrect(entry: string, problem: Problem): boolean {
   const value = Number(entry)
   if (entry === '' || !Number.isFinite(value)) {
     return false
   }
-  if (problem.tolerance <= 0) {
-    return value === problem.answer
+  if (within(value, problem.answer, problem.tolerance)) {
+    return true
   }
-  /* Absolute, not scaled by the answer: a tolerance that grew with the number
-     made a large answer accept a wide band of entries that were nowhere near
-     it — e^3.91 is 49.9, and a 0.5 read as a proportion accepted everything
-     from 25 to 75. */
-  return Math.abs(value - problem.answer) <= problem.tolerance + 1e-9
+  return problem.alternate !== undefined &&
+    within(value, problem.alternate.answer, problem.alternate.tolerance)
 }
 
 /* The place the leniency's last digit sits in — 0.05 is written to the
@@ -523,9 +552,11 @@ function promptWidth(prompt: Prompt): number {
   switch (prompt.kind) {
     case 'plain':
       return prompt.text.length
+    /* Side by side on one line, so both halves count, plus about half a digit
+       for the solidus. */
     case 'fraction':
-      return Math.max(prompt.numerator.length, prompt.denominator.length) +
-        prompt.suffix.length + 1
+      return prompt.numerator.length + prompt.denominator.length +
+        prompt.suffix.length + 0.9
     /* The drawn hook is 0.6em, about one tabular digit, and a degree adds half
        of one on top of it. */
     case 'root':
@@ -544,12 +575,19 @@ function PromptBody({ prompt }: { prompt: Prompt }) {
       {prompt.kind === 'plain' && prompt.text}
 
       {/* A row rather than inline text: the suffix has to centre against the
-          whole stack, not sit on the numerator's baseline. */}
+          whole fraction, not sit on the numerator's baseline. */}
       {prompt.kind === 'fraction' && (
         <span className="prompt-row">
-          <span className="stack">
-            <span className="stack-top">{prompt.numerator}</span>
-            <span className="stack-bottom">{prompt.denominator}</span>
+          <span className="fraction">
+            {prompt.numerator}
+            <svg
+              className="fraction-slash"
+              viewBox="0 0 30 86"
+              aria-hidden="true"
+            >
+              <line x1="4" y1="80" x2="26" y2="6" />
+            </svg>
+            {prompt.denominator}
           </span>
           <span className="prompt-suffix">{prompt.suffix}</span>
         </span>
@@ -585,13 +623,19 @@ function PromptBody({ prompt }: { prompt: Prompt }) {
   )
 }
 
+/* Two elements, because they answer different questions. The outer box holds a
+   fixed height at a fixed type size and pins its content to the bottom, so a
+   taller prompt grows upward into empty space and the answer bar below it never
+   moves. The inner one carries the per-prompt shrink. */
 function Question({ prompt }: { prompt: Prompt }) {
   return (
     <div
       className="question"
       style={{ '--chars': promptWidth(prompt) } as React.CSSProperties}
     >
-      <PromptBody prompt={prompt} />
+      <span className="question-fit">
+        <PromptBody prompt={prompt} />
+      </span>
     </div>
   )
 }
@@ -1341,7 +1385,14 @@ function Game({
        leniency of 1 or more names no decimal place, so it falls through to the
        digit count of the answer rounded to whole numbers. */
     if (problem.tolerance > 0) {
-      const places = leniencyPlaces(problem.tolerance)
+      /* A leading `0.` means the proportion is being typed rather than the
+         percentage, and that form needs two more places to carry the same
+         precision. Only ambiguous when the percentage is itself below 1, which
+         takes a denominator above 100 to arrange. */
+      const form = next.startsWith('0.') && problem.alternate !== undefined ?
+        problem.alternate :
+        problem
+      const places = leniencyPlaces(form.tolerance)
       if (places > 0) {
         const point = next.indexOf('.')
         if (point !== -1 && next.length - point - 1 === places) {

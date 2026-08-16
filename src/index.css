@@ -134,23 +134,36 @@ button {
 }
 
 /* Pushes the question / answer pair to the optical centre and leaves the
-   keypad pinned to the bottom, inside thumb reach. */
+   keypad pinned to the bottom, inside thumb reach.
+
+   The height is fixed and the content sits on its floor, so a prompt that
+   stands taller than one line — a fraction, a raised exponent — grows up into
+   the empty space above rather than pushing the answer bar down. Nothing below
+   this box moves between problems. */
 .question {
   margin-top: auto;
-  text-align: center;
 
-  /* Never wider than the column: tabular digits run about 0.6em, so
-     150cqw / character keeps the longest prompt inside its bounds. The 60px
-     ceiling is what a nine-character prompt used to settle at — short prompts
-     like `ln 49` would otherwise be set half again as large as long ones, and
-     type that jumps between problems is type you have to refocus on. */
-  font-size: min(clamp(44px, 14vw, 60px), calc(150cqw / var(--chars, 8)));
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+
+  /* Fixed here, so the box's own em-height cannot drift with the prompt; the
+     per-prompt shrink lives on .question-fit below. */
+  font-size: clamp(44px, 14vw, 60px);
+  height: 1.5em;
+
   font-weight: 600;
   letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
+}
 
-  /* The stacked fraction and the raised exponent both stand outside the line
-     box; without this the prompt's own height would shift between problems. */
+/* Never wider than the column: tabular digits run about 0.6em, so
+   150cqw / character keeps the longest prompt inside its bounds. The 1em
+   ceiling is the size above — short prompts like `ln 49` would otherwise be
+   set half again as large as long ones, and type that jumps between problems
+   is type you have to refocus on. */
+.question-fit {
+  font-size: min(1em, calc(150cqw / var(--chars, 8)));
   line-height: 1.2;
 }
 
@@ -175,24 +188,33 @@ button {
   gap: 0.24em;
 }
 
-/* Two lines where every other prompt has one, so it is set slightly down to
-   keep the block's overall mass in line with the rest. */
-.stack {
+/* Flat: both halves on one line with the solidus leaning between them, so the
+   fraction is exactly as tall as any other prompt and reads left to right at a
+   glance. The tight line-height puts the digit boxes at about cap height,
+   which makes centring them against the stroke an optical centring rather
+   than a line-box one. */
+.fraction {
   display: inline-flex;
-  flex-direction: column;
   align-items: center;
 
-  font-size: 0.88em;
-  line-height: 1.04;
+  line-height: 0.78;
 }
 
-.stack-top {
-  padding: 0 0.16em 0.05em;
-  border-bottom: 0.055em solid currentColor;
-}
+/* Drawn at the same 0.055em as the vinculum and the radical's arm, so every
+   rule in the notation came from one pen. The viewBox is 30×86 in a
+   0.30em×0.86em box — a user unit is 0.01em in both axes, as it is on the
+   root, so the stroke holds its weight and its 73° rake at any size. It stands
+   a little above and below the digits, the way a solidus should. */
+.fraction-slash {
+  flex: none;
+  width: 0.3em;
+  height: 0.86em;
+  margin: 0 0.02em;
 
-.stack-bottom {
-  padding: 0.05em 0.16em 0;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 5.5;
+  stroke-linecap: round;
 }
 
 .prompt-suffix {
