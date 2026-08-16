@@ -862,6 +862,50 @@ function Game({
     window.clearTimeout(holdTimer.current)
   }
 
+  /* No dependency array: the handler closes over answer, problem and settings,
+     and re-subscribing each render keeps it reading the current ones without a
+     dep list that goes stale the next time this component grows a field. */
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      /* Results screen owns its own keyboard — its two buttons need Enter. */
+      if (secondsLeft === 0) {
+        return
+      }
+      if (event.metaKey || event.ctrlKey || event.altKey) {
+        return
+      }
+
+      if (/^[0-9]$/.test(event.key)) {
+        event.preventDefault()
+        pressDigit(Number(event.key))
+        return
+      }
+      if (event.key === 'Enter') {
+        /* A focused keypad button already fires its onClick on Enter, so
+           handling it here as well would submit the same answer twice. */
+        if (event.target instanceof HTMLButtonElement) {
+          return
+        }
+        event.preventDefault()
+        submit()
+        return
+      }
+      if (event.key === 'Backspace') {
+        event.preventDefault()
+        backspace()
+        return
+      }
+      /* The keyboard equivalent of holding the touch backspace. */
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        clearAns()
+      }
+    }
+
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  })
+
   if (secondsLeft === 0) {
     const accuracy = total === 0 ? 0 : Math.round((correct / total) * 100)
 
