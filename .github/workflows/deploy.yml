@@ -2,7 +2,7 @@ name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: [main]
+    branches: [main, zetamac]
   workflow_dispatch:
 
 # Required by the Pages deployment action: id-token for the deploy attestation,
