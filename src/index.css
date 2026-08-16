@@ -229,6 +229,13 @@ button {
   color: var(--submit-ink);
 }
 
+/* When the decimal point takes the bottom-right corner, the check key drops to
+   a full-width row of its own — a wider target than the one it gave up, which
+   is the right trade for the key pressed last on every problem. */
+.key-wide {
+  grid-column: 1 / -1;
+}
+
 /* iPhone-calculator geometry: fixed circles, grid centred rather than stretched. */
 :root[data-theme='dark'] .keypad {
   grid-template-columns: repeat(3, var(--key-size));
@@ -240,6 +247,14 @@ button {
   width: var(--key-size);
   height: var(--key-size);
   min-height: 0;
+}
+
+/* The fixed circle above would leave the wide key floating in the middle of
+   its row, and a circle stretched across three columns reads as a pill, so it
+   takes the rounded rectangle the other full-width buttons use. */
+:root[data-theme='dark'] .keypad .key-wide {
+  width: auto;
+  border-radius: 26px;
 }
 
 /* Verdict flash. A narrow horizontal radius makes the colour saturate well
@@ -359,10 +374,19 @@ button {
   grid-column: 1;
 }
 
-.op-weight {
+/* One knob on the basic rows, two on the advanced ones — a share and its
+   leniency — but the group keeps the same column either way, so every share
+   still lines up down the list. */
+.op-knobs {
   grid-column: 2;
   grid-row: 1 / span 2;
 
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.op-knob {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -374,7 +398,7 @@ button {
   -webkit-tap-highlight-color: transparent;
 }
 
-.op-weight-label {
+.op-knob-label {
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.12em;
@@ -593,9 +617,93 @@ button {
   color: var(--ink-soft);
 }
 
+/* ── Advanced disclosure ───────────────────────────────────────────────────
+   The advanced operations are off by default and most runs never want them,
+   so they sit behind a header that is itself the control. Collapsed, it still
+   says how many are switched on — config that is enabled but out of sight is
+   the one thing this must never hide. */
+
+.start-advanced,
 .start-submit,
 .start-duration {
   margin-top: clamp(20px, 4dvh, 32px);
+}
+
+.advanced-toggle {
+  width: 100%;
+  padding: 0 0 2px;
+  margin: 0;
+
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  background: transparent;
+  border: 0;
+
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.advanced-toggle:focus-visible {
+  outline: 3px solid var(--ink);
+  outline-offset: 4px;
+  border-radius: 4px;
+}
+
+/* .start-label is a block heading elsewhere; in this row it is one item, so
+   its bottom margin moves to the list it was separating. */
+.advanced-label {
+  margin: 0;
+}
+
+.start-advanced .op-list {
+  margin-top: 10px;
+}
+
+.advanced-count {
+  padding: 2px 8px;
+
+  background: var(--ground);
+  border-radius: 999px;
+
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--ink-soft);
+}
+
+:root[data-theme='dark'] .advanced-count {
+  background: var(--surface);
+}
+
+.advanced-caret {
+  margin-left: auto;
+
+  font-size: 18px;
+  color: var(--ink-soft);
+
+  transition: rotate 160ms ease-out;
+}
+
+.advanced-toggle.open .advanced-caret {
+  rotate: 180deg;
+}
+
+/* Two knobs where the basic rows have one, in a column that has to stay narrow
+   enough to leave the specimen room to breathe. */
+.op-knobs-pair .weight {
+  width: 2.9em;
+  font-size: clamp(15px, 4vw, 19px);
+}
+
+/* Left-aligned under the auto-submit row it qualifies, unlike the centred
+   note above Start. */
+.advanced-warning {
+  margin-top: 8px;
+  text-align: left;
+  font-size: 13px;
 }
 
 /* Reuses .op-row so the box matches the operation rows, but it has only the one
@@ -866,5 +974,9 @@ button {
 
   .op-row {
     animation: none;
+  }
+
+  .advanced-caret {
+    transition: none;
   }
 }
