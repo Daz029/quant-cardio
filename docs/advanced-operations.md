@@ -60,6 +60,15 @@ probability ballparking, Fermi estimates — which are not in this round.
 - `Problem` gains `tolerance`, an absolute slack carried on the problem itself: `0` means exact
   (every basic operation), `0.2` accepts anything within `0.2` of the answer. The grader never has
   to know which operation produced what it is marking.
+- `Problem` may also carry an **`alternate`** — a second way of writing the same answer, accepted
+  alongside the first, with its own tolerance. Only `fraction` uses it: `8/18` can be answered
+  `44.4` or `0.444`, because a runner who thinks in proportions shouldn't have to convert. The
+  slack scales with the units, so the proportion's band is a hundredth of the percentage's: the
+  leniency is read in percentage points, and `0.1` of one of those is `0.001` of a proportion. The
+  two bands are a factor of a hundred apart and cannot overlap, so neither form can be credited
+  against the other.
+- Each form divides once rather than deriving one from the other: `100 * (n / d)` rounds twice and
+  drifts in the last bits against `(100 * n) / d`.
 - An empty or half-typed entry (`''`, `'.'`) is wrong rather than `0`, so a bare submit cannot be
   credited against an answer that happens to be zero.
 - Leniency has **no ceiling** — a slack of `5` is a legitimate setting for an answer measured in
@@ -79,6 +88,11 @@ probability ballparking, Fermi estimates — which are not in this round.
   `3.91`. There is no digit count to wait for otherwise: `ln 50` is `3.912023005428146`. A leniency
   of `1` names no decimal place at all and falls back to the digit count of the answer rounded to
   whole numbers.
+- On a problem with an `alternate`, a leading `0.` is read as the proportion being typed rather
+  than the percentage, and the place rule switches to that form's tolerance — two places further
+  out. Only ambiguous when the percentage is itself below `1`, which takes a denominator above
+  `100` to arrange; the grader still accepts both forms there, so only the auto-submit timing is
+  affected.
 
 ### 4. Feedback
 
@@ -92,8 +106,13 @@ nothing about where the runner actually landed.
 Prompts are no longer strings — the generator emits a shape (`plain`, `fraction`, `root`, `power`)
 and the question renders it:
 
-- a fraction stacks numerator over denominator with a rule between, its `as %` centred beside the
-  whole stack rather than sitting on the numerator's baseline;
+- a fraction is set **flat**, with a leaning solidus between the two halves rather than stacked or
+  offset. Both earlier attempts put the numerator above the denominator — a full stack, then an
+  overlapping diagonal — and both made the fraction taller than every other prompt for no reading
+  benefit. Flat, it is exactly one line, reads left to right at a glance, and its rows in the
+  review list match the others' height. The tight `0.78` line-height puts the digit boxes at about
+  cap height, so centring them against the stroke is an optical centring rather than a line-box
+  one, and the stroke stands slightly above and below the digits the way a solidus should;
 - a root **draws its own hook** as an inline SVG rather than setting the font's `√`. A glyph ends
   wherever its designer put it, which left the vinculum floating unattached above and to the right
   of the arm. The path finishes in a horizontal stub, flush with the SVG's right edge and exactly
@@ -102,12 +121,22 @@ and the question renders it:
   a 0.6em×1em box, so a user unit is 0.01em in both axes and the hook holds its shape at every type
   size. The degree tucks into the crook. The radicand's tight line-height pulls the digits up under
   the rule, which an inline box's full-ascent height would otherwise leave a gap below;
-- a power raises its exponent.
+- a power raises its exponent, and the solidus, the vinculum and the radical's arm are all drawn at
+  the same `0.055em`, so every rule in the notation came from one pen.
 
 The type scale is capped at **60px**, down from 84px. Size is still `150cqw / character` for long
 prompts, but short ones like `ln 49` were being set half again as large as `1176 ÷ 12`, and type
 that jumps size between problems is type you have to refocus on. Each shape reports its own
-character width — a stacked fraction is as wide as its longer half, not both plus a slash.
+character width.
+
+**The question box is a fixed height and its content sits on the floor of it.** A prompt taller
+than one line grows *upward* into empty space instead of pushing the answer bar down — the earlier
+layout split the difference between two `auto` margins, so a fraction moved the bar down by half
+its extra height and moved it back on the next problem. That meant the box's height could not be
+allowed to depend on the prompt, so the size lives in two places now: `.question` holds a fixed
+`clamp(44px, 14vw, 60px)` and a `1.5em` height, and `.question-fit` inside it carries the
+per-prompt `min(1em, 150cqw / character)` shrink. Measured across all four prompt kinds with the
+keypad held constant, the answer bar and keypad sit at the same pixel every time.
 
 ### 6. Question review
 
@@ -182,6 +211,8 @@ URL round trip, old-URL migration); the keypad and disclosure are visual.
       answer is inside the configured ranges.
 - [x] The basic four are still graded exactly and still produce integer answers.
 - [x] An answer within the leniency is correct; one outside it is wrong.
+- [x] A fraction conversion accepts both `44.4` and `0.444`, each within its own band, and rejects
+      a miss in either form. No other operation carries a second form.
 - [x] The band does not widen with the answer: `e^3.91` at a slack of `0.5` accepts `49.9` and
       `50.3`, and rejects `25`, `51` and `75`.
 - [x] A leniency above `1` survives a URL round trip instead of reverting the whole set.
