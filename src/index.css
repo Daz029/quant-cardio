@@ -253,6 +253,16 @@ button {
 
   --peak: 1;
   animation: flash-out 700ms ease-out forwards;
+
+  /* A band along the bottom edge only — faded out well below the question,
+     which sits near the optical centre. Geometry lives here; the two states
+     supply only --flash. */
+  background: linear-gradient(
+    to top,
+    var(--flash) 0%,
+    color-mix(in oklab, var(--flash) 38%, transparent) 5%,
+    transparent 15%
+  );
 }
 
 @keyframes flash-out {
@@ -265,19 +275,11 @@ button {
 }
 
 .screen.correct {
-  background: radial-gradient(
-    44% 92% at 50% 45%,
-    transparent 16%,
-    var(--correct) 100%
-  );
+  --flash: var(--correct);
 }
 
 .screen.wrong {
-  background: radial-gradient(
-    44% 92% at 50% 45%,
-    transparent 16%,
-    var(--wrong) 100%
-  );
+  --flash: var(--wrong);
 }
 
 /* ── Start screen ──────────────────────────────────────────────────────────
@@ -591,8 +593,35 @@ button {
   color: var(--ink-soft);
 }
 
+.start-submit,
 .start-duration {
   margin-top: clamp(20px, 4dvh, 32px);
+}
+
+/* Reuses .op-row so the box matches the operation rows, but it has only the one
+   line, so the caption's stacking margin comes off. */
+.submit-row .op-toggle {
+  margin-top: 0;
+}
+
+.submit-mode {
+  grid-column: 2;
+}
+
+/* Sized down from the full-width duration select and dropped onto --ground, so
+   it reads as inset in the row rather than floating on the same surface. */
+.submit-mode .start-select {
+  width: auto;
+  height: 44px;
+  padding: 0 36px 0 13px;
+
+  font-size: clamp(13px, 3.4vw, 16px);
+  background: var(--ground);
+}
+
+.submit-mode .select-caret {
+  right: 13px;
+  font-size: 15px;
 }
 
 .select-shell {

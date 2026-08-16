@@ -17,6 +17,11 @@ type RangedOperation = Extract<Operation, 'addition' | 'multiplication'>
 type Range = { min: number; max: number }
 type OperandRanges = { left: Range; right: Range }
 
+/* 'correct' advances only once the entry matches, so a problem can't be left
+   behind; 'digits' advances as soon as the entry is as long as the answer,
+   right or wrong. */
+type SubmitMode = 'correct' | 'digits'
+
 type Settings = {
   operations: Record<Operation, boolean>
   /* Relative shares, not required to sum to 1 — they are normalised across
@@ -25,6 +30,8 @@ type Settings = {
   weights: Record<Operation, number>
   addition: OperandRanges
   multiplication: OperandRanges
+  autoSubmit: boolean
+  submitMode: SubmitMode
   durationSeconds: number
 }
 
@@ -49,6 +56,8 @@ const DEFAULT_SETTINGS: Settings = {
     left: { min: 2, max: 12 },
     right: { min: 2, max: 100 },
   },
+  autoSubmit: false,
+  submitMode: 'correct',
   durationSeconds: 60,
 }
 
@@ -123,9 +132,17 @@ function parseWeights(raw: string | null): Record<Operation, number> {
   return weights
 }
 
+function parseSubmitMode(raw: string | null): SubmitMode {
+  if (raw === 'correct' || raw === 'digits') {
+    return raw
+  }
+  return DEFAULT_SETTINGS.submitMode
+}
+
 function readSettings(search: string): Settings {
   const params = new URLSearchParams(search)
   const seconds = Number(params.get('sec'))
+  const auto = params.get('auto')
 
   return {
     operations: parseOperations(params.get('ops')),
@@ -138,6 +155,8 @@ function readSettings(search: string): Settings {
       left: parseRange(params.get('mulL'), DEFAULT_SETTINGS.multiplication.left),
       right: parseRange(params.get('mulR'), DEFAULT_SETTINGS.multiplication.right),
     },
+    autoSubmit: auto === null ? DEFAULT_SETTINGS.autoSubmit : auto === '1',
+    submitMode: parseSubmitMode(params.get('mode')),
     durationSeconds: DURATIONS.includes(seconds) ?
       seconds :
       DEFAULT_SETTINGS.durationSeconds,
@@ -160,6 +179,8 @@ function writeSettings(settings: Settings): string {
     `addR=${range(settings.addition.right)}`,
     `mulL=${range(settings.multiplication.left)}`,
     `mulR=${range(settings.multiplication.right)}`,
+    `auto=${settings.autoSubmit ? 1 : 0}`,
+    `mode=${settings.submitMode}`,
     `sec=${settings.durationSeconds}`,
   ].join('&')
 }
@@ -350,6 +371,14 @@ function Home({
     setSettings(previous => ({...previous, weights:
       {...previous.weights, [operation]: parsed}}))
     return String(parsed)
+  }
+
+  function toggleAutoSubmit() {
+    setSettings(previous => ({...previous, autoSubmit: !previous.autoSubmit}))
+  }
+
+  function setSubmitMode(mode: SubmitMode) {
+    setSettings(previous => ({...previous, submitMode: mode}))
   }
 
   function setDuration(seconds: number) {
@@ -623,6 +652,42 @@ function Home({
           </li>
         </ul>
 
+        <div className="start-submit">
+          <h2 className="start-label">Submission options</h2>
+
+          <div className="op-row submit-row">
+            <label className="op-toggle">
+              <input
+                type="checkbox"
+                className="op-input"
+                defaultChecked={settings.autoSubmit}
+                onChange={toggleAutoSubmit}
+              />
+              <span className="op-box" aria-hidden="true" />
+              <span className="op-caption">auto-submit</span>
+            </label>
+
+            {settings.autoSubmit && (
+              <div className="select-shell submit-mode">
+                <select
+                  className="start-select"
+                  aria-label="Auto-submit method"
+                  defaultValue={settings.submitMode}
+                  onChange={(event) => setSubmitMode(
+                    event.target.value === 'digits' ? 'digits' : 'correct',
+                  )}
+                >
+                  <option value="correct">on correct answer</option>
+                  <option value="digits">at full digits</option>
+                </select>
+                <span className="select-caret" aria-hidden="true">
+                  ▾
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+
         <div className="start-duration">
           <label className="start-label" htmlFor="duration">
             Duration
@@ -681,6 +746,7 @@ function Game({
   const [message, setMessage] = useState('')
 
   const [status, setStatus] = useState<"correct" | "wrong" | "">("")
+  const [flashId, setFlashId] = useState(0)
 
   const [problem, setProblem] = useState<Problem>(() => generateProblem(settings))
 
@@ -710,12 +776,48 @@ function Game({
     return () => window.clearInterval(tick)
   }, [deadline])
 
+  /* Every flash gets its own id so the overlay remounts and replays. Two
+     answers inside the 700ms animation would otherwise set the same status and
+     leave the running animation alone — the second flash would be dropped,
+     which auto-submit makes common. */
+  function flash(kind: "correct" | "wrong") {
+    setStatus(kind)
+    setFlashId((previous) => previous + 1)
+  }
+
+  function advance(isCorrect: boolean) {
+    flash(isCorrect ? "correct" : "wrong")
+    setTotal((previous) => previous + 1)
+    if (isCorrect) {
+      setCorrect((previous) => previous + 1)
+    }
+    setProblem(generateProblem(settings))
+    setAnswer('')
+    setMessage('')
+  }
+
   function pressDigit(digit: number) {
     if (answer.length >= MAX_LENGTH) {
       setMessage("LENGTH CAP")
+      return
     }
-    else {
-      setAnswer(answer + digit)
+
+    const next = answer + digit
+    setAnswer(next)
+
+    /* Decided here rather than in an effect on answer, so the check runs
+       against the digit just pressed instead of the previous render's value. */
+    if (!settings.autoSubmit || Date.now() >= deadline) {
+      return
+    }
+    if (settings.submitMode === 'correct') {
+      if (Number(next) === problem.answer) {
+        advance(true)
+      }
+      return
+    }
+    if (next.length === String(problem.answer).length) {
+      advance(Number(next) === problem.answer)
     }
   }
 
@@ -736,13 +838,16 @@ function Game({
       setMessage("")
     }
     const isCorrect = Number(answer) === problem.answer
-    setStatus(isCorrect ? "correct" : "wrong")
-    setTotal((previous) => previous + 1)
-    if (isCorrect) {
-      setCorrect((previous) => previous + 1)
+
+    /* Nothing leaves a problem behind in correct-answer mode, so the check key
+       can only confirm — advancing on a wrong entry would make it a skip. */
+    if (settings.autoSubmit && settings.submitMode === 'correct' && !isCorrect) {
+      flash("wrong")
+      setAnswer('')
+      setMessage('')
+      return
     }
-    setProblem(generateProblem(settings))
-    setAnswer('')
+    advance(isCorrect)
   }
 
   function clearAns() {
@@ -808,6 +913,7 @@ function Game({
     <main className="app">
       {status !== "" && (
         <div
+          key={flashId}
           className={`screen ${status}`}
           onAnimationEnd={() => setStatus("")}
           aria-hidden="true"
