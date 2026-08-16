@@ -30,6 +30,8 @@ generator.
 - Each operation carries a share, default `0.25`. Shares are relative weights, not a partition —
   they are normalised across the enabled operations at draw time, so disabling one redistributes
   its share rather than leaving a gap.
+- Submission options: an auto-submit toggle, default off. When on, a method dropdown appears —
+  `on correct answer` (default) or `at full digits`.
 - Duration in seconds. Default `120`.
 
 ### 2. Problem generation
@@ -49,8 +51,15 @@ generator.
 
 - One problem at a time. Answer entry is a **bar** — free-width, not fixed place-value slots, so
   the answer's digit count is never revealed.
-- **Submit-based, not auto-advance.** Zetamac advances the instant the typed value matches; this
-  does not. Wrong answers are possible and are recorded.
+- **Submit-based by default.** Wrong answers are possible and are recorded. Auto-submit is opt-in
+  and changes this:
+  - `on correct answer` — advances the instant the entry matches, Zetamac-style. Nothing advances
+    on a wrong entry, including the check key, which would otherwise be a skip button. Every
+    problem therefore ends correct, so the results screen's percentage is always 100 in this mode
+    and only the count and the pace carry information.
+  - `at full digits` — advances as soon as the entry is as long as the answer, right or wrong.
+    Contradicts acceptance criterion 7: advancing at the right length tells the player how many
+    digits the answer has. Chosen deliberately.
 - Wrong submit → **advance to a new problem**, counted in total, not counted correct. No re-arm,
   so every problem contributes exactly 1 to total.
 - Two counters: total answered, total correct.
@@ -100,7 +109,8 @@ together with hardcoded config if that's faster. Results (4) last.
   the per-minute half of acceptance criterion 6.
 - **Config survives a reload via URL params**, Zetamac-style — read once at mount, rewritten with
   `replaceState` whenever settings change. Shape:
-  `?ops=add,sub,mul,div&w=0.25,0.25,0.25,0.25&addL=2-100&addR=2-100&mulL=2-12&mulR=2-100&sec=60`.
+  `?ops=add,sub,mul,div&w=0.25,0.25,0.25,0.25&addL=2-100&addR=2-100&mulL=2-12&mulR=2-100`
+  `&auto=0&mode=correct&sec=60`.
   `w` is positional in add/sub/mul/div order and reverts as a whole set if any entry is
   malformed — a half-parsed mix of URL and default weights would be worse than either. Every other
   field falls back
