@@ -68,6 +68,10 @@ button {
   min-height: 100dvh;
   margin: auto;
 
+  /* Lets .question size itself against the column rather than the viewport, so
+     a long prompt shrinks instead of running off the edge. */
+  container-type: inline-size;
+
   padding: 16px 20px calc(20px + env(safe-area-inset-bottom));
 
   display: flex;
@@ -98,13 +102,46 @@ button {
   border-color: var(--surface);
 }
 
+/* Toggle left, clock right. The clock is the only thing on the game screen that
+   changes without the runner touching it, so it stays quiet until it expires. */
+.game-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* .theme-toggle sets align-self: flex-end for the column layout it sits in
+   elsewhere; in this row that would drop it to the bottom edge. */
+.game-bar .theme-toggle {
+  align-self: center;
+}
+
+.game-clock {
+  padding: 8px 4px;
+
+  color: var(--ink-soft);
+  font-size: 22px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+
+  transition: color 200ms linear;
+}
+
+.game-clock.spent {
+  color: var(--wrong);
+}
+
 /* Pushes the question / answer / message group to the optical centre and
    leaves the keypad pinned to the bottom, inside thumb reach. */
 .question {
   margin-top: auto;
   text-align: center;
 
-  font-size: clamp(52px, 16vw, 84px);
+  /* Big by default, but never wider than the column: tabular digits run about
+     0.6em, so 150cqw / character keeps the longest prompt inside its bounds. */
+  font-size: min(clamp(52px, 16vw, 84px), calc(150cqw / var(--chars, 8)));
   font-weight: 600;
   letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
@@ -243,6 +280,551 @@ button {
   );
 }
 
+/* ── Start screen ──────────────────────────────────────────────────────────
+   Same tokens as the game. Each operation row is a specimen of the problem
+   it produces: the configured rows are editable in place, the reversed rows
+   restate their operands so the dependency is visible rather than described. */
+
+.start {
+  gap: 0;
+  justify-content: space-between;
+}
+
+.start-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.start-title {
+  margin: 0;
+  font-size: clamp(30px, 8vw, 40px);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.start-tagline {
+  margin: 2px 0 0;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--ink-soft);
+}
+
+.start-body {
+  margin: clamp(20px, 5dvh, 40px) 0;
+}
+
+.start-label {
+  margin: 0 0 10px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.op-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Specimen and caption stack in the first column; the share sits beside them
+   spanning both, so the four shares line up as a scannable column. */
+.op-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 14px;
+
+  padding: 14px 16px;
+
+  background: var(--surface);
+  border: 2px solid var(--edge);
+  border-radius: 14px;
+
+  transition: opacity 140ms linear;
+  animation: row-in 300ms var(--delay, 0ms) both ease-out;
+}
+
+.op-toggle,
+.op-spec {
+  grid-column: 1;
+}
+
+.op-weight {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+
+  cursor: pointer;
+  user-select: none;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.op-weight-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.weight {
+  width: 3.4em;
+  padding: 2px 0;
+  margin: 0;
+
+  font: inherit;
+  font-size: clamp(16px, 4.4vw, 21px);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  text-align: center;
+
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid var(--ink-soft);
+  border-radius: 0;
+
+  appearance: none;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.weight:focus {
+  outline: none;
+  border-bottom-color: var(--ink);
+}
+
+.weight:focus-visible {
+  outline: 3px solid var(--ink);
+  outline-offset: 3px;
+}
+
+.op-row.off {
+  opacity: 0.42;
+}
+
+@keyframes row-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+:root[data-theme='dark'] .op-row {
+  background: var(--surface);
+  border-color: transparent;
+  border-radius: 20px;
+}
+
+/* The specimen leads; the checkbox and name sit under it as the caption. */
+.op-spec {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0 6px;
+
+  margin: 0;
+  font-size: clamp(16px, 4.4vw, 21px);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.5;
+}
+
+/* Subtraction and division take no range of their own, so the line says what
+   they are instead of restating operands. */
+.op-note {
+  color: var(--ink-soft);
+  font-weight: 500;
+}
+
+.op-glyph {
+  font-size: 1.15em;
+  font-weight: 500;
+  color: var(--ink-soft);
+}
+
+.operand {
+  white-space: nowrap;
+}
+
+.paren,
+.dash {
+  color: var(--ink-soft);
+  font-weight: 400;
+}
+
+.paren {
+  padding: 0 1px;
+}
+
+.dash {
+  padding: 0 2px;
+}
+
+.bound {
+  width: auto;
+  min-width: 1.1em;
+  field-sizing: content;
+  padding: 0 1px;
+  margin: 0;
+
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  text-align: center;
+
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid var(--ink-soft);
+  border-radius: 0;
+
+  appearance: none;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.bound:focus {
+  outline: none;
+  border-bottom-color: var(--ink);
+}
+
+.bound:focus-visible {
+  outline: 3px solid var(--ink);
+  outline-offset: 3px;
+}
+
+.op-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+
+  margin-top: 8px;
+
+  cursor: pointer;
+  user-select: none;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.op-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.op-box {
+  flex: none;
+  width: 24px;
+  height: 24px;
+
+  display: grid;
+  place-items: center;
+
+  background: var(--ground);
+  border: 2px solid var(--ink-soft);
+  border-radius: 7px;
+
+  transition: background-color 110ms linear, border-color 110ms linear;
+}
+
+/* A tick's visual mass sits below its bounding box, so it is nudged up a
+   pixel to read as centred. */
+.op-box::after {
+  content: '';
+
+  width: 5px;
+  height: 10px;
+
+  border: solid var(--surface);
+  border-width: 0 2.5px 2.5px 0;
+  rotate: 45deg;
+  translate: 0 -1px;
+
+  opacity: 0;
+  transition: opacity 110ms linear;
+}
+
+.op-input:checked + .op-box::after {
+  opacity: 1;
+}
+
+/* Mirrors the game's key geometry: soft rectangles in light, circles in dark.
+   The unchecked face is scoped to :not(:checked) so it cannot outrank the
+   checked fill below on specificity. */
+:root[data-theme='dark'] .op-box {
+  border-radius: 50%;
+}
+
+:root[data-theme='dark'] .op-input:not(:checked) + .op-box {
+  background: transparent;
+}
+
+.op-input:checked + .op-box {
+  background: var(--ink);
+  border-color: var(--ink);
+}
+
+.op-input:focus-visible + .op-box {
+  outline: 3px solid var(--ink);
+  outline-offset: 3px;
+}
+
+.op-caption {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--ink-soft);
+}
+
+.start-duration {
+  margin-top: clamp(20px, 4dvh, 32px);
+}
+
+.select-shell {
+  position: relative;
+  display: block;
+}
+
+.start-select {
+  width: 100%;
+  height: 60px;
+  padding: 0 48px 0 16px;
+
+  font: inherit;
+  font-size: clamp(16px, 4.4vw, 21px);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+
+  background: var(--surface);
+  border: 2px solid var(--edge);
+  border-radius: 14px;
+
+  appearance: none;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+:root[data-theme='dark'] .start-select {
+  border-color: transparent;
+  border-radius: 20px;
+}
+
+.start-select:focus-visible {
+  outline: 3px solid var(--ink);
+  outline-offset: 3px;
+}
+
+.select-caret {
+  position: absolute;
+  top: 50%;
+  right: 18px;
+  translate: 0 -50%;
+
+  font-size: 18px;
+  color: var(--ink-soft);
+  pointer-events: none;
+}
+
+.start-foot {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.start-note {
+  margin: 0;
+  min-height: 20px;
+  text-align: center;
+
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+
+.start-go {
+  width: 100%;
+  min-height: var(--key-size);
+
+  background: var(--submit-face);
+  color: var(--submit-ink);
+  border: 2px solid var(--edge);
+  border-radius: var(--radius);
+
+  font-size: clamp(24px, 6vw, 30px);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+
+  cursor: pointer;
+  user-select: none;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+
+  transition: background-color 90ms linear;
+}
+
+/* The keypad's circular keys would read as a pill here, so the Start key keeps
+   a rounded-rectangle even in dark mode where --radius is 50%. */
+:root[data-theme='dark'] .start-go {
+  border-radius: 26px;
+}
+
+.start-go:active:not(:disabled) {
+  background: var(--surface-press);
+}
+
+.start-go:focus-visible {
+  outline: 3px solid var(--ink);
+  outline-offset: 3px;
+}
+
+.start-go:disabled {
+  background: var(--surface);
+  color: var(--ink-soft);
+  cursor: not-allowed;
+}
+
+/* Results sits between the bar and the foot and centres itself in what's left,
+   so the two exits stay pinned in thumb reach exactly where the keypad was. */
+.results-body {
+  margin: auto 0;
+}
+
+.results-title {
+  margin: 0 0 clamp(16px, 4dvh, 28px);
+  text-align: center;
+
+  font-size: clamp(40px, 11vw, 60px);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.results-stats {
+  margin: 0;
+
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.results-stat {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+
+  padding: 16px 18px;
+
+  background: var(--surface);
+  border: 2px solid var(--edge);
+  border-radius: 14px;
+}
+
+:root[data-theme='dark'] .results-stat {
+  border-color: transparent;
+  border-radius: 20px;
+}
+
+.results-stat dt {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.results-stat dd {
+  margin: 0;
+
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+
+  font-size: clamp(30px, 8vw, 40px);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+.results-detail {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--ink-soft);
+}
+
+.results-foot {
+  display: flex;
+  gap: 10px;
+}
+
+.results-exit,
+.results-again {
+  flex: 1;
+  min-height: var(--key-size);
+
+  border: 2px solid var(--edge);
+  border-radius: var(--radius);
+
+  font-size: clamp(16px, 4.4vw, 20px);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+
+  cursor: pointer;
+  user-select: none;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+
+  transition: background-color 90ms linear;
+}
+
+.results-exit {
+  background: transparent;
+  color: var(--ink-soft);
+}
+
+.results-again {
+  background: var(--submit-face);
+  color: var(--submit-ink);
+}
+
+/* Same reasoning as .start-go: --radius is 50% in dark mode, which would turn
+   these two into pills. */
+:root[data-theme='dark'] .results-exit,
+:root[data-theme='dark'] .results-again {
+  border-radius: 26px;
+}
+
+:root[data-theme='dark'] .results-exit {
+  border-color: var(--surface);
+}
+
+.results-exit:active,
+.results-again:active {
+  background: var(--surface-press);
+}
+
+.results-exit:focus-visible,
+.results-again:focus-visible {
+  outline: 3px solid var(--ink);
+  outline-offset: 3px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   body,
   .keypad button {
@@ -251,5 +833,9 @@ button {
 
   .screen {
     --peak: 0.5;
+  }
+
+  .op-row {
+    animation: none;
   }
 }
