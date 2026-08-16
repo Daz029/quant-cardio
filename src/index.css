@@ -133,22 +133,30 @@ button {
   color: var(--wrong);
 }
 
-/* Pushes the question / answer / message group to the optical centre and
-   leaves the keypad pinned to the bottom, inside thumb reach. */
+/* Pushes the question / answer pair to the optical centre and leaves the
+   keypad pinned to the bottom, inside thumb reach. */
 .question {
   margin-top: auto;
   text-align: center;
 
-  /* Big by default, but never wider than the column: tabular digits run about
-     0.6em, so 150cqw / character keeps the longest prompt inside its bounds. */
-  font-size: min(clamp(52px, 16vw, 84px), calc(150cqw / var(--chars, 8)));
+  /* Never wider than the column: tabular digits run about 0.6em, so
+     150cqw / character keeps the longest prompt inside its bounds. The 60px
+     ceiling is what a nine-character prompt used to settle at — short prompts
+     like `ln 49` would otherwise be set half again as large as long ones, and
+     type that jumps between problems is type you have to refocus on. */
+  font-size: min(clamp(44px, 14vw, 60px), calc(150cqw / var(--chars, 8)));
   font-weight: 600;
   letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
+
+  /* The stacked fraction and the raised exponent both stand outside the line
+     box; without this the prompt's own height would shift between problems. */
+  line-height: 1.2;
 }
 
+/* Sits under the keypad, so it reads as what came back rather than as part of
+   what is being typed. */
 .message {
-  margin-bottom: auto;
   min-height: 24px;
   text-align: center;
 
@@ -157,7 +165,93 @@ button {
   color: var(--ink-soft);
 }
 
+/* ── Prompt shapes ─────────────────────────────────────────────────────────
+   A fraction stacks, a root takes a vinculum and an exponent is raised. All
+   three size in em, so they follow the prompt's own type scale. */
+
+.prompt-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.24em;
+}
+
+/* Two lines where every other prompt has one, so it is set slightly down to
+   keep the block's overall mass in line with the rest. */
+.stack {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+
+  font-size: 0.88em;
+  line-height: 1.04;
+}
+
+.stack-top {
+  padding: 0 0.16em 0.05em;
+  border-bottom: 0.055em solid currentColor;
+}
+
+.stack-bottom {
+  padding: 0.05em 0.16em 0;
+}
+
+.prompt-suffix {
+  color: var(--ink-soft);
+  font-weight: 500;
+}
+
+/* Hook and vinculum are two boxes with one top edge: flex-start puts the SVG's
+   y=0 and the radicand's border on the same line, and the path's last segment
+   is a horizontal stub of the same 0.055em, flush with the SVG's right edge
+   where the radicand begins. Nothing here depends on where a font happens to
+   end its √. */
+.root {
+  display: inline-flex;
+  align-items: flex-start;
+}
+
+/* The viewBox is 60×100 and the box is 0.6em×1em, so a user unit is exactly
+   0.01em in both axes — the hook keeps its shape at every type size. */
+.root-hook {
+  flex: none;
+  width: 0.6em;
+  height: 1em;
+
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 5.5;
+}
+
+/* Tucked into the crook, the way a degree sits on a radical. */
+.root-degree {
+  margin: 0.12em -0.14em 0 0;
+  font-size: 0.46em;
+  font-weight: 700;
+}
+
+/* The tight line-height is what pulls the digits up under the rule — the box
+   would otherwise be as tall as the font's full ascent and leave a gap. */
+.radicand {
+  display: inline-block;
+  line-height: 0.78;
+
+  padding: 0.04em 0.12em 0 0.04em;
+  border-top: 0.055em solid currentColor;
+}
+
+.exponent {
+  font-size: 0.5em;
+  font-weight: 700;
+  vertical-align: 0.72em;
+  line-height: 0;
+  letter-spacing: 0;
+}
+
 .answer-bar {
+  /* Takes over the slack the message used to hold, now that the message has
+     moved below the keypad. */
+  margin-bottom: auto;
+
   display: flex;
   align-items: center;
   justify-content: flex-start;
@@ -617,11 +711,11 @@ button {
   color: var(--ink-soft);
 }
 
-/* ── Advanced disclosure ───────────────────────────────────────────────────
-   The advanced operations are off by default and most runs never want them,
-   so they sit behind a header that is itself the control. Collapsed, it still
-   says how many are switched on — config that is enabled but out of sight is
-   the one thing this must never hide. */
+/* ── Disclosure ────────────────────────────────────────────────────────────
+   A section header that is itself the control, used by the advanced operations
+   on the start screen and the question review on the results screen. Both keep
+   a count beside the label: what is folded away should still say how much of
+   it there is. */
 
 .start-advanced,
 .start-submit,
@@ -629,7 +723,7 @@ button {
   margin-top: clamp(20px, 4dvh, 32px);
 }
 
-.advanced-toggle {
+.disclosure {
   width: 100%;
   padding: 0 0 2px;
   margin: 0;
@@ -646,7 +740,7 @@ button {
   -webkit-tap-highlight-color: transparent;
 }
 
-.advanced-toggle:focus-visible {
+.disclosure:focus-visible {
   outline: 3px solid var(--ink);
   outline-offset: 4px;
   border-radius: 4px;
@@ -654,7 +748,7 @@ button {
 
 /* .start-label is a block heading elsewhere; in this row it is one item, so
    its bottom margin moves to the list it was separating. */
-.advanced-label {
+.disclosure-label {
   margin: 0;
 }
 
@@ -662,7 +756,7 @@ button {
   margin-top: 10px;
 }
 
-.advanced-count {
+.disclosure-count {
   padding: 2px 8px;
 
   background: var(--ground);
@@ -674,11 +768,11 @@ button {
   color: var(--ink-soft);
 }
 
-:root[data-theme='dark'] .advanced-count {
+:root[data-theme='dark'] .disclosure-count {
   background: var(--surface);
 }
 
-.advanced-caret {
+.disclosure-caret {
   margin-left: auto;
 
   font-size: 18px;
@@ -687,7 +781,7 @@ button {
   transition: rotate 160ms ease-out;
 }
 
-.advanced-toggle.open .advanced-caret {
+.disclosure.open .disclosure-caret {
   rotate: 180deg;
 }
 
@@ -698,13 +792,6 @@ button {
   font-size: clamp(15px, 4vw, 19px);
 }
 
-/* Left-aligned under the auto-submit row it qualifies, unlike the centred
-   note above Start. */
-.advanced-warning {
-  margin-top: 8px;
-  text-align: left;
-  font-size: 13px;
-}
 
 /* Reuses .op-row so the box matches the operation rows, but it has only the one
    line, so the caption's stacking margin comes off. */
@@ -903,6 +990,81 @@ button {
   font-weight: 600;
   letter-spacing: 0;
   color: var(--ink-soft);
+}
+
+/* ── Question review ───────────────────────────────────────────────────────
+   Every answered problem, in the order it came up. The list scrolls inside its
+   own box rather than growing the page, so Play again stays in thumb reach no
+   matter how long the run was. */
+
+.results-review {
+  margin-top: clamp(16px, 3dvh, 24px);
+}
+
+.review-list {
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+
+  max-height: 42dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* The prompt takes the slack; the entry and the reference answer keep their
+   own columns so the verdicts line up down the list. */
+.review-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+
+  padding: 10px 14px;
+
+  background: var(--surface);
+  border: 2px solid var(--edge);
+  border-radius: 12px;
+
+  font-size: 15px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+:root[data-theme='dark'] .review-row {
+  border-color: transparent;
+  border-radius: 16px;
+}
+
+/* Font size rather than a transform: the fraction, radical and exponent are
+   all measured in em, so they come down to scale on their own. */
+.review-prompt {
+  font-size: 17px;
+  line-height: 1.35;
+}
+
+.review-entry {
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.review-row.right .review-entry {
+  color: var(--correct);
+}
+
+/* Colour alone carries the verdict: a rule struck through a single digit at
+   this size is indistinguishable from a dash. */
+.review-row.wrong .review-entry {
+  color: var(--wrong);
+}
+
+/* What it should have been, quiet beside the strike-through. */
+.review-answer {
+  color: var(--ink-soft);
+  font-weight: 600;
 }
 
 .results-foot {

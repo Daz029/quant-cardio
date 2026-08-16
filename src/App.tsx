@@ -48,9 +48,9 @@ type Settings = {
      whatever is enabled at draw time. Equal values mean an even mix, so the
      0.25 default reads as a quarter each while still tolerating any edit. */
   weights: Record<Operation, number>
-  /* Relative tolerance on the reference answer: 0.05 accepts anything within
-     5% of it. Per-operation, because the mental precision a root deserves is
-     not the one a percentage deserves. */
+  /* Absolute slack on the reference answer: 0.2 accepts anything within 0.2 of
+     it, whatever its magnitude. Per-operation, because the precision a root
+     deserves is not the one a percentage deserves. */
   leniency: Record<AdvancedOperation, number>
   addition: OperandRanges
   multiplication: OperandRanges
@@ -89,11 +89,11 @@ const DEFAULT_SETTINGS: Settings = {
     exp: 0.25,
   },
   leniency: {
-    fraction: 0.05,
-    percent: 0.05,
-    root: 0.05,
-    ln: 0.05,
-    exp: 0.05,
+    fraction: 0.1,
+    percent: 5,
+    root: 0.2,
+    ln: 0.2,
+    exp: 0.5,
   },
   addition: {
     left: { min: 2, max: 100 },
@@ -192,7 +192,6 @@ function parseShares<Key extends string>(
   raw: string | null,
   keys: Key[],
   fallback: Record<Key, number>,
-  ceiling: number,
 ): Record<Key, number> {
   const listed = raw === null ? [] : raw.split(',')
   if (listed.length === 0 || listed.length > keys.length) {
@@ -208,8 +207,7 @@ function parseShares<Key extends string>(
     if (
       listed[index].trim() === '' ||
       !Number.isFinite(parsed) ||
-      parsed < 0 ||
-      parsed > ceiling
+      parsed < 0
     ) {
       return fallback
     }
@@ -232,19 +230,13 @@ function readSettings(search: string): Settings {
 
   return {
     operations: parseOperations(params.get('ops')),
-    weights: parseShares(
-      params.get('w'),
-      OPERATIONS,
-      DEFAULT_SETTINGS.weights,
-      Number.POSITIVE_INFINITY,
-    ),
-    /* A relative tolerance above 1 would accept every entry of the right sign,
-       so it is treated as malformed rather than clamped. */
+    weights: parseShares(params.get('w'), OPERATIONS, DEFAULT_SETTINGS.weights),
+    /* No ceiling: an absolute slack of 5 is a legitimate setting for an answer
+       measured in tens, so only a negative one is malformed. */
     leniency: parseShares(
       params.get('tol'),
       ADVANCED_OPERATIONS,
       DEFAULT_SETTINGS.leniency,
-      1,
     ),
     addition: {
       left: parseRange(params.get('addL'), DEFAULT_SETTINGS.addition.left),
@@ -301,11 +293,30 @@ function writeSettings(settings: Settings): string {
   ].join('&')
 }
 
-/* tolerance is relative: 0 means the entry must equal the answer exactly, and
-   0.05 accepts anything within 5% of it. It travels with the problem rather
+/* What the problem looks like, kept apart from what it says: a fraction is
+   stacked, a root sits under a vinculum and an exponent is raised, none of
+   which a string can carry. The generator picks the shape, Question draws it. */
+type Prompt =
+  | { kind: 'plain'; text: string }
+  | { kind: 'fraction'; numerator: string; denominator: string; suffix: string }
+  | { kind: 'root'; degree: number; radicand: string }
+  | { kind: 'power'; base: string; exponent: string }
+
+/* tolerance is absolute: 0 means the entry must equal the answer exactly, and
+   0.2 accepts anything within 0.2 of it. It travels with the problem rather
    than being looked up at grading time, so the grader never has to know which
    operation produced what it is marking. */
-type Problem = { prompt: string; answer: number; tolerance: number }
+type Problem = { prompt: Prompt; answer: number; tolerance: number }
+
+/* One answered problem, kept for the review list on the results screen. The
+   prompt is carried whole rather than flattened to text, so the list can draw
+   the same fraction and radical the question did. */
+type Attempt = {
+  prompt: Prompt
+  entry: string
+  answer: number
+  correct: boolean
+}
 
 function drawOperand({ min, max }: Range): number {
   return min + Math.floor(Math.random() * (max - min + 1))
@@ -319,11 +330,40 @@ function formatNumber(value: number, decimals: number): string {
 
 const SUPERSCRIPTS = ['⁰', '¹', '²', '³', '⁴', '⁵', '⁶', '⁷', '⁸', '⁹']
 
+/* Only the root's degree needs raising, and it is always a small integer, so
+   the characters do the job without a second baseline to align. */
 function superscript(value: number): string {
   return String(value)
     .split('')
     .map((digit) => SUPERSCRIPTS[Number(digit)])
     .join('')
+}
+
+const plain = (text: string): Prompt => ({ kind: 'plain', text })
+
+/* The numerator is drawn strictly under the denominator, so a conversion is
+   always a proper fraction and a percentage never reaches 100. The denominator
+   goes first, floored one above the numerator's minimum where its own range
+   reaches that far; where it doesn't, the denominator's range wins and the
+   numerator drops to whatever still fits beneath it rather than the draw
+   failing or going improper. */
+function drawProperFraction(ranges: OperandRanges): {
+  numerator: number
+  denominator: number
+} {
+  const floor = Math.min(ranges.left.min + 1, ranges.right.max)
+  const denominator = drawOperand({
+    min: Math.max(ranges.right.min, floor),
+    max: ranges.right.max,
+  })
+  /* A denominator of 1 leaves nothing under it, so the numerator bottoms out
+     at 0 — a 0% problem, which is answerable, rather than an improper one. */
+  const ceiling = Math.max(0, denominator - 1)
+  const numerator = drawOperand({
+    min: Math.min(ranges.left.min, ceiling),
+    max: Math.min(ranges.left.max, ceiling),
+  })
+  return { numerator, denominator }
 }
 
 /* Subtraction and division are the addition and multiplication draws read
@@ -365,28 +405,32 @@ function generateProblem(settings: Settings): Problem {
     case 'addition': {
       const left = drawOperand(settings.addition.left)
       const right = drawOperand(settings.addition.right)
-      return { prompt: `${left} + ${right}`, answer: left + right, tolerance: 0 }
+      return { prompt: plain(`${left} + ${right}`), answer: left + right, tolerance: 0 }
     }
     case 'subtraction': {
       const left = drawOperand(settings.addition.left)
       const right = drawOperand(settings.addition.right)
-      return { prompt: `${left + right} − ${left}`, answer: right, tolerance: 0 }
+      return { prompt: plain(`${left + right} − ${left}`), answer: right, tolerance: 0 }
     }
     case 'multiplication': {
       const left = drawOperand(settings.multiplication.left)
       const right = drawOperand(settings.multiplication.right)
-      return { prompt: `${left} × ${right}`, answer: left * right, tolerance: 0 }
+      return { prompt: plain(`${left} × ${right}`), answer: left * right, tolerance: 0 }
     }
     case 'division': {
       const left = drawOperand(settings.multiplication.left)
       const right = drawOperand(settings.multiplication.right)
-      return { prompt: `${left * right} ÷ ${left}`, answer: right, tolerance: 0 }
+      return { prompt: plain(`${left * right} ÷ ${left}`), answer: right, tolerance: 0 }
     }
     case 'fraction': {
-      const numerator = drawOperand(settings.fraction.left)
-      const denominator = drawOperand(settings.fraction.right)
+      const { numerator, denominator } = drawProperFraction(settings.fraction)
       return {
-        prompt: `${numerator}/${denominator} as %`,
+        prompt: {
+          kind: 'fraction',
+          numerator: String(numerator),
+          denominator: String(denominator),
+          suffix: 'as %',
+        },
         answer: (100 * numerator) / denominator,
         tolerance: settings.leniency.fraction,
       }
@@ -397,11 +441,12 @@ function generateProblem(settings: Settings): Problem {
        where one would round away more than the leniency allows, and graded
        against the numerator it was built from. */
     case 'percent': {
-      const numerator = drawOperand(settings.fraction.left)
-      const denominator = drawOperand(settings.fraction.right)
+      const { numerator, denominator } = drawProperFraction(settings.fraction)
       const percentage = (100 * numerator) / denominator
       return {
-        prompt: `${formatNumber(percentage, percentage < 10 ? 2 : 1)}% of ${denominator}`,
+        prompt: plain(
+          `${formatNumber(percentage, percentage < 10 ? 2 : 1)}% of ${denominator}`,
+        ),
         answer: numerator,
         tolerance: settings.leniency.percent,
       }
@@ -410,7 +455,7 @@ function generateProblem(settings: Settings): Problem {
       const degree = drawOperand(settings.root.left)
       const radicand = drawOperand(settings.root.right)
       return {
-        prompt: `${degree === 2 ? '' : superscript(degree)}√${radicand}`,
+        prompt: { kind: 'root', degree, radicand: String(radicand) },
         answer: Math.pow(radicand, 1 / degree),
         tolerance: settings.leniency.root,
       }
@@ -418,7 +463,7 @@ function generateProblem(settings: Settings): Problem {
     case 'ln': {
       const x = drawOperand(settings.ln)
       return {
-        prompt: `ln ${x}`,
+        prompt: plain(`ln ${x}`),
         answer: Math.log(x),
         tolerance: settings.leniency.ln,
       }
@@ -431,7 +476,7 @@ function generateProblem(settings: Settings): Problem {
     case 'exp': {
       const exponent = Number(Math.log(drawOperand(settings.ln)).toFixed(2))
       return {
-        prompt: `e^${exponent}`,
+        prompt: { kind: 'power', base: 'e', exponent: String(exponent) },
         answer: Math.exp(exponent),
         tolerance: settings.leniency.exp,
       }
@@ -450,8 +495,105 @@ function isCorrect(entry: string, problem: Problem): boolean {
   if (problem.tolerance <= 0) {
     return value === problem.answer
   }
-  const slack = problem.tolerance * Math.abs(problem.answer)
-  return Math.abs(value - problem.answer) <= slack + 1e-9
+  /* Absolute, not scaled by the answer: a tolerance that grew with the number
+     made a large answer accept a wide band of entries that were nowhere near
+     it — e^3.91 is 49.9, and a 0.5 read as a proportion accepted everything
+     from 25 to 75. */
+  return Math.abs(value - problem.answer) <= problem.tolerance + 1e-9
+}
+
+/* The place the leniency's last digit sits in — 0.05 is written to the
+   hundredths, so it asks for two decimals. It is what full-digits auto-submit
+   waits for on an approximated answer, where the reference answer's own digit
+   count (ln 49 is 3.8918202981106265) is no cue at all. */
+function leniencyPlaces(leniency: number): number {
+  /* String() reaches for exponent form below 1e-6, which has no decimals to
+     count, so those go the long way round. */
+  const written = String(leniency).includes('e') ?
+    leniency.toFixed(20).replace(/0+$/, '') :
+    String(leniency)
+  const point = written.indexOf('.')
+  return point === -1 ? 0 : written.length - point - 1
+}
+
+/* How wide the prompt reads, in characters, for the type scale to size against.
+   A stacked fraction is as wide as its longer half, not both plus a slash, and
+   an exponent is set at about half size. */
+function promptWidth(prompt: Prompt): number {
+  switch (prompt.kind) {
+    case 'plain':
+      return prompt.text.length
+    case 'fraction':
+      return Math.max(prompt.numerator.length, prompt.denominator.length) +
+        prompt.suffix.length + 1
+    /* The drawn hook is 0.6em, about one tabular digit, and a degree adds half
+       of one on top of it. */
+    case 'root':
+      return prompt.radicand.length + (prompt.degree === 2 ? 1.3 : 1.8)
+    case 'power':
+      return prompt.base.length + prompt.exponent.length * 0.55 + 0.3
+  }
+}
+
+/* Just the marks, at whatever size the caller is set in — every measurement
+   below is in em, so the same shapes serve the question at 60px and the review
+   list at 15px. */
+function PromptBody({ prompt }: { prompt: Prompt }) {
+  return (
+    <>
+      {prompt.kind === 'plain' && prompt.text}
+
+      {/* A row rather than inline text: the suffix has to centre against the
+          whole stack, not sit on the numerator's baseline. */}
+      {prompt.kind === 'fraction' && (
+        <span className="prompt-row">
+          <span className="stack">
+            <span className="stack-top">{prompt.numerator}</span>
+            <span className="stack-bottom">{prompt.denominator}</span>
+          </span>
+          <span className="prompt-suffix">{prompt.suffix}</span>
+        </span>
+      )}
+
+      {/* The hook is drawn rather than set: a font's √ ends wherever its
+          designer put it, which is what left the vinculum floating. This path
+          finishes in a horizontal stub flush with the SVG's right edge and
+          exactly as thick as the radicand's rule, and flex-start puts the two
+          tops on the same line, so they meet with no seam. */}
+      {prompt.kind === 'root' && (
+        <span className="root">
+          {prompt.degree !== 2 && (
+            <span className="root-degree">{superscript(prompt.degree)}</span>
+          )}
+          <svg className="root-hook" viewBox="0 0 60 100" aria-hidden="true">
+            <path
+              d="M1 54 L17 54 L33 92 L55 2.75 L60 2.75"
+              strokeLinejoin="round"
+            />
+          </svg>
+          <span className="radicand">{prompt.radicand}</span>
+        </span>
+      )}
+
+      {prompt.kind === 'power' && (
+        <>
+          {prompt.base}
+          <span className="exponent">{prompt.exponent}</span>
+        </>
+      )}
+    </>
+  )
+}
+
+function Question({ prompt }: { prompt: Prompt }) {
+  return (
+    <div
+      className="question"
+      style={{ '--chars': promptWidth(prompt) } as React.CSSProperties}
+    >
+      <PromptBody prompt={prompt} />
+    </div>
+  )
 }
 
 function formatClock(totalSeconds: number): string {
@@ -711,17 +853,13 @@ function Home({
     return String(parsed)
   }
 
-  /* A relative tolerance, so 1 already accepts every entry between zero and
-     double the answer — above that there is nothing left to loosen. */
+  /* An absolute slack, in the units of the answer itself, so it has no upper
+     bound worth enforcing — 5 is loose on a numerator and tight on a
+     percentage, and only the operation knows which. */
   function settleLeniency(operation: AdvancedOperation, value: string): string {
     const parsed = Number(value.trim())
 
-    if (
-      value.trim() === '' ||
-      !Number.isFinite(parsed) ||
-      parsed < 0 ||
-      parsed > 1
-    ) {
+    if (value.trim() === '' || !Number.isFinite(parsed) || parsed < 0) {
       return String(settings.leniency[operation])
     }
 
@@ -887,15 +1025,15 @@ function Home({
         <div className="start-advanced">
           <button
             type="button"
-            className={`advanced-toggle ${advancedOpen ? 'open' : ''}`}
+            className={`disclosure ${advancedOpen ? 'open' : ''}`}
             aria-expanded={advancedOpen}
             onClick={() => setAdvancedOpen((previous) => !previous)}
           >
-            <span className="start-label advanced-label">Advanced</span>
+            <span className="start-label disclosure-label">Advanced</span>
             {advancedOn > 0 && (
-              <span className="advanced-count">{advancedOn} on</span>
+              <span className="disclosure-count">{advancedOn} on</span>
             )}
-            <span className="advanced-caret" aria-hidden="true">▾</span>
+            <span className="disclosure-caret" aria-hidden="true">▾</span>
           </button>
 
           {advancedOpen && (
@@ -940,16 +1078,17 @@ function Home({
                 enabled={settings.operations.root}
                 onToggle={() => toggleOperation('root')}
               >
+                {/* Laid out as the problem reads: the degree, the radical, the
+                    radicand — so the specimen shows which range is which
+                    without having to name them. */}
                 <div className="op-spec">
-                  <span className="op-glyph">ⁿ√x</span>
-                  <span className="op-glyph">n</span>
                   <Bounds
                     label="Root degree"
                     range={settings.root.left}
                     settle={(bound, value) =>
                       settleBound('root', 'left', bound, value)}
                   />
-                  <span className="op-glyph">x</span>
+                  <span className="op-glyph">√</span>
                   <Bounds
                     label="Root radicand"
                     range={settings.root.right}
@@ -967,7 +1106,7 @@ function Home({
                 onToggle={() => toggleOperation('ln')}
               >
                 <div className="op-spec">
-                  <span className="op-glyph">ln x</span>
+                  <span className="op-glyph">ln</span>
                   <Bounds
                     label="Natural log x"
                     range={settings.ln}
@@ -1025,12 +1164,6 @@ function Home({
             )}
           </div>
 
-          {settings.autoSubmit && settings.submitMode === 'digits' &&
-            advancedOn > 0 && (
-            <p className="start-note advanced-warning">
-              Advanced answers wait for ✓ — their digit count is not a cue.
-            </p>
-          )}
         </div>
 
         <div className="start-duration">
@@ -1097,6 +1230,8 @@ function Game({
 
   const [total, setTotal] = useState(0)
   const [correct, setCorrect] = useState(0)
+  const [history, setHistory] = useState<Attempt[]>([])
+  const [reviewOpen, setReviewOpen] = useState(false)
 
   /* The clock runs off a fixed deadline rather than counting a state variable
      down, so a slow tick or a backgrounded tab can't stretch the round. The
@@ -1136,12 +1271,21 @@ function Game({
     setFlashId((previous) => previous + 1)
   }
 
-  function advance(wasCorrect: boolean) {
+  /* The entry is passed in rather than read from state: pressKey calls this
+     with the digit it just added, which the answer state does not hold until
+     the next render. */
+  function advance(entry: string, wasCorrect: boolean) {
     flash(wasCorrect ? "correct" : "wrong")
     setTotal((previous) => previous + 1)
     if (wasCorrect) {
       setCorrect((previous) => previous + 1)
     }
+    setHistory((previous) => [...previous, {
+      prompt: problem.prompt,
+      entry,
+      answer: problem.answer,
+      correct: wasCorrect,
+    }])
     /* An approximated answer is only feedback if the runner sees what it was
        approximating. It reads against the problem just answered — setProblem
        below hasn't landed yet — and clears on the first key of the next one. */
@@ -1187,18 +1331,30 @@ function Game({
     }
     if (settings.submitMode === 'correct') {
       if (isCorrect(next, problem)) {
-        advance(true)
+        advance(next, true)
       }
       return
     }
-    /* Digit count is meaningless for an approximated answer — ln 50 is
-       3.912023005428146 — so those problems wait for the check key even in
-       full-digits mode. */
+    /* An approximated answer has no digit count to reach — ln 50 is
+       3.912023005428146 — so it advances at the place its leniency is written
+       to instead: 0.05 asks for two decimals, and 3.91 submits itself. A
+       leniency of 1 or more names no decimal place, so it falls through to the
+       digit count of the answer rounded to whole numbers. */
     if (problem.tolerance > 0) {
-      return
+      const places = leniencyPlaces(problem.tolerance)
+      if (places > 0) {
+        const point = next.indexOf('.')
+        if (point !== -1 && next.length - point - 1 === places) {
+          advance(next, isCorrect(next, problem))
+        }
+        return
+      }
     }
-    if (next.length === String(problem.answer).length) {
-      advance(isCorrect(next, problem))
+    const target = problem.tolerance > 0 ?
+      problem.answer.toFixed(0) :
+      String(problem.answer)
+    if (next.length === target.length) {
+      advance(next, isCorrect(next, problem))
     }
   }
 
@@ -1228,7 +1384,7 @@ function Game({
       setMessage('')
       return
     }
-    advance(wasCorrect)
+    advance(answer, wasCorrect)
   }
 
   function clearAns() {
@@ -1327,6 +1483,57 @@ function Game({
               </dd>
             </div>
           </dl>
+
+          {/* Nothing to review after a run with no answers, so the control
+              doesn't appear at all rather than opening onto an empty list. */}
+          {history.length > 0 && (
+            <div className="results-review">
+              <button
+                type="button"
+                className={`disclosure ${reviewOpen ? 'open' : ''}`}
+                aria-expanded={reviewOpen}
+                onClick={() => setReviewOpen((previous) => !previous)}
+              >
+                <span className="start-label disclosure-label">
+                  See questions
+                </span>
+                <span className="disclosure-count">{history.length}</span>
+                <span className="disclosure-caret" aria-hidden="true">▾</span>
+              </button>
+
+              {/* Misses first — they are the reason to open this at all. Sorted
+                  at render rather than on the way in, so history itself stays
+                  in the order the run happened, and sort's stability keeps each
+                  group chronological within itself. */}
+              {reviewOpen && (
+                <ol className="review-list">
+                  {[...history]
+                    .sort((left, right) =>
+                      Number(left.correct) - Number(right.correct))
+                    .map((attempt, index) => (
+                      <li
+                        key={index}
+                        className={`review-row ${attempt.correct ? 'right' : 'wrong'}`}
+                      >
+                        <span className="review-prompt">
+                          <PromptBody prompt={attempt.prompt} />
+                        </span>
+                        <span className="review-entry">
+                          {attempt.entry === '' ? '—' : attempt.entry}
+                        </span>
+                        {/* The reference answer only earns its space when the
+                            entry missed it. */}
+                        {!attempt.correct && (
+                          <span className="review-answer">
+                            {formatNumber(attempt.answer, 3)}
+                          </span>
+                        )}
+                      </li>
+                    ))}
+                </ol>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="results-foot">
@@ -1374,18 +1581,11 @@ function Game({
         </div>
       </div>
 
-      <div
-        className="question"
-        style={{ '--chars': problem.prompt.length } as React.CSSProperties}
-      >
-        {problem.prompt}
-      </div>
+      <Question prompt={problem.prompt} />
 
       <div className="answer-bar">
         {answer}
       </div>
-
-      <div className="message" role="status" aria-live="polite">{message}</div>
 
       <div className="keypad">
         {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((digit) => (
@@ -1421,6 +1621,10 @@ function Game({
           submitKey}
         {decimals && submitKey}
       </div>
+
+      {/* Under the check key, not above it: the exact value is what you read
+          after answering, and the answer bar is what you read before. */}
+      <div className="message" role="status" aria-live="polite">{message}</div>
     </main>
   )
 }
