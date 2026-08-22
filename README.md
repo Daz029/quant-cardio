@@ -1,32 +1,27 @@
-# React + TypeScript + Vite
+# Quant Cardio
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+React + TypeScript + Vite website for Zetamac-style arithmetic on a mobile-compatible website, hosted on Github Pages.
 
-Currently, two official plugins are available:
+## How to use
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+Just go to the [Github Pages site](https://daz029.github.io/quant-cardio). Pick your operations, click advanced to select more advanced versions, select your game length, then play. 
 
-## React Compiler
+# Features
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+* Phone-friendly UI with large buttons.
+* Support for addition, subtraction, multiplication, division, fraction-to-percent conversions (and vice versa), nth root, and natural log (and exponential) questions, generated from a selected range of possible values.
+* Shareable game settings with URL embedding.
 
-## Expanding the Oxlint configuration
+## Pictures!
 
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
+<img width="300" height="450" alt="image" src="https://github.com/user-attachments/assets/f0026909-2ab6-4f88-ad0b-519705dd724e" />
+<img width="300" height="450" alt="image" src="https://github.com/user-attachments/assets/426c9c42-8803-4798-bac3-a84c634d479a" />
+<img width="300" height="450" alt="image" src="https://github.com/user-attachments/assets/dfa5eacd-76d4-4d2d-9de0-8524e8fb5d71" />
 
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
-```
+## Planned Extensions/possible other modes
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+* Probability ballparking.
+* Order of magnitude estimation questions.
+* Applied statistics facts with easy computations.
+* Scaling/complexity estimation.
+* Market trivia.
