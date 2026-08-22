@@ -1,6 +1,6 @@
 # Quant Cardio
 
-React + TypeScript + Vite website for Zetamac-style arithmetic on a mobile-compatible website, hosted on Github Pages.
+React + TypeScript + Vite website for Zetamac-style arithmetic (and other planned low-focus problems) on a mobile-compatible website, hosted on Github Pages.
 
 ## How to use
 
